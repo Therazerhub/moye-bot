@@ -7,6 +7,7 @@ import os
 import sys
 import sqlite3
 import asyncio
+import re
 from telethon import TelegramClient
 from telethon.tl.types import Channel
 from dotenv import load_dotenv
@@ -18,6 +19,83 @@ API_ID = int(os.getenv('TELEGRAM_API_ID', '0'))
 API_HASH = os.getenv('TELEGRAM_API_HASH', '')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_PATH = 'stash.db'
+
+# Domain to category mapping (same as bot.py)
+DOMAIN_CATEGORIES = {
+    'brazzers': 'Brazzers',
+    'brazzer': 'Brazzers',
+    'pornhub': 'Pornhub',
+    'ph': 'Pornhub',
+    'xvideos': 'XVideos',
+    'xnxx': 'XNXX',
+    'youporn': 'YouPorn',
+    'redtube': 'RedTube',
+    'spankbang': 'SpankBang',
+    'chaturbate': 'Chaturbate',
+    'onlyfans': 'OnlyFans',
+    'manyvids': 'ManyVids',
+    'clips4sale': 'Clips4Sale',
+    'realitykings': 'Reality Kings',
+    'bangbros': 'BangBros',
+    'naughtyamerica': 'Naughty America',
+    'digitalplayground': 'Digital Playground',
+    'mofos': 'Mofos',
+    'teamskeet': 'TeamSkeet',
+    'fakehub': 'FakeHub',
+    'vixen': 'Vixen',
+    'tushy': 'Tushy',
+    'blacked': 'Blacked',
+    'blackedraw': 'Blacked Raw',
+    'deeper': 'Deeper',
+    'julesjordan': 'Jules Jordan',
+    'evilangel': 'Evil Angel',
+    'milf': 'MILF',
+    'anal': 'Anal',
+    'lesbian': 'Lesbian',
+    'threesome': 'Threesome',
+    'teen': 'Teen',
+    'amateur': 'Amateur',
+    'homemade': 'Homemade',
+    'webcam': 'Webcam',
+    'casting': 'Casting',
+    'massage': 'Massage',
+}
+
+def extract_category_from_title(title):
+    """Extract category from video title based on domains/keywords"""
+    if not title:
+        return None
+    
+    title_lower = title.lower()
+    
+    # Check for domain patterns
+    patterns = [
+        r'\[([^\]]+)\]',
+        r'\(([^\)]+)\)',
+        r'www\.([a-z0-9]+)',
+        r'([a-z0-9]+)\.com',
+        r'([a-z0-9]+)\.net',
+        r'([a-z0-9]+)\.org',
+        r'([a-z0-9]+)\.tv',
+        r'([a-z0-9]+)\.xxx',
+        r'([a-z0-9]+)_',
+        r'_([a-z0-9]+)',
+        r'-([a-z0-9]+)-',
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, title_lower)
+        for match in matches:
+            clean_match = match.strip().replace('.', '').replace('-', '').replace('_', '')
+            if clean_match in DOMAIN_CATEGORIES:
+                return DOMAIN_CATEGORIES[clean_match]
+    
+    # Direct keyword matching
+    for keyword, category in DOMAIN_CATEGORIES.items():
+        if keyword in title_lower:
+            return category
+    
+    return None
 
 async def import_from_channel(channel_id_str):
     """Import videos from channel using the bot"""
@@ -116,6 +194,9 @@ async def import_from_channel(channel_id_str):
                     if not title:
                         title = f"Video {message.id}"
                     
+                    # Extract category from title
+                    category = extract_category_from_title(title)
+                    
                     # We need to forward to the bot to get a usable file_id
                     # Forward the message to the bot itself
                     try:
@@ -133,12 +214,13 @@ async def import_from_channel(channel_id_str):
                             # Try to save
                             try:
                                 c.execute("""
-                                    INSERT INTO videos (file_id, title, duration, source_channel)
-                                    VALUES (?, ?, ?, ?)
-                                """, (file_ref, title, duration, channel.title))
+                                    INSERT INTO videos (file_id, title, duration, category, source_channel)
+                                    VALUES (?, ?, ?, ?, ?)
+                                """, (file_ref, title, duration, category, channel.title))
                                 conn.commit()
                                 saved += 1
-                                print(f"✅ Saved: {title[:60]}")
+                                cat_info = f" [{category}]" if category else ""
+                                print(f"✅ Saved: {title[:60]}{cat_info}")
                             except sqlite3.IntegrityError:
                                 skipped += 1
                             except Exception as e:
