@@ -196,8 +196,8 @@ def get_top_tags(tags: List[dict], max_tags: int = 5) -> List[str]:
     return formatted[:max_tags]
 
 
-def generate_clean_caption(scene_data: dict, original_filename: str = None) -> str:
-    """Generate clean caption: Title + Studio + Female Performer(s) + 5 Tags"""
+def generate_clean_caption(scene_data: dict, original_filename: str = None, source: str = "local") -> str:
+    """Generate clean caption: Title + Studio + Female Performer(s) + 5 Tags + Source indicator"""
     
     # Get title
     title = scene_data.get('title', '')
@@ -221,17 +221,20 @@ def generate_clean_caption(scene_data: dict, original_filename: str = None) -> s
     # Build caption
     lines = []
     
+    # Source indicator emoji
+    source_emoji = "🌐" if source in ("stashdb", "fansdb") else "📁"
+    
     # Title line with studio
     if performer_str and studio_name:
-        lines.append(f"🎬 <b>{performer_str} — {title}</b>")
+        lines.append(f"{source_emoji} <b>{performer_str} — {title}</b>")
         lines.append(f"📺 {studio_name}")
     elif performer_str:
-        lines.append(f"🎬 <b>{performer_str} — {title}</b>")
+        lines.append(f"{source_emoji} <b>{performer_str} — {title}</b>")
     elif studio_name:
-        lines.append(f"🎬 <b>{title}</b>")
+        lines.append(f"{source_emoji} <b>{title}</b>")
         lines.append(f"📺 {studio_name}")
     else:
-        lines.append(f"🎬 <b>{title}</b>")
+        lines.append(f"{source_emoji} <b>{title}</b>")
     
     # Tags line (max 5)
     if tag_list:
@@ -247,10 +250,10 @@ def generate_clean_caption(scene_data: dict, original_filename: str = None) -> s
     return caption
 
 
-def process_video_caption(filename: str) -> Optional[str]:
+def process_video_caption(filename: str) -> tuple:
     """
-    Main function: Search databases and return clean caption
-    Format: Title + Female Performer(s) + 5 Tags
+    Main function: Search databases and return clean caption with source
+    Returns: (caption, source)
     """
     # Parse filename
     performer, title = parse_filename(filename)
@@ -260,7 +263,7 @@ def process_video_caption(filename: str) -> Optional[str]:
         scene = search_fansdb(title, performer)
         if scene:
             print(f"✅ FansDB: {filename[:50]}")
-            return generate_clean_caption(scene, filename)
+            return generate_clean_caption(scene, filename, source="fansdb"), "fansdb"
     except Exception as e:
         print(f"FansDB error: {e}")
     
@@ -269,14 +272,14 @@ def process_video_caption(filename: str) -> Optional[str]:
         scene = search_stashdb(title, performer)
         if scene:
             print(f"✅ StashDB: {filename[:50]}")
-            return generate_clean_caption(scene, filename)
+            return generate_clean_caption(scene, filename, source="stashdb"), "stashdb"
     except Exception as e:
         print(f"StashDB error: {e}")
     
     # Fallback: just format filename
     if performer:
-        return f"🎬 <b>{performer} — {title}</b>"
-    return f"🎬 <b>{title}</b>"
+        return f"📁 <b>{performer} — {title}</b>", "local"
+    return f"📁 <b>{title}</b>", "local"
 
 
 # Test
