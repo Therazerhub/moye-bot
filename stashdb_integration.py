@@ -197,7 +197,7 @@ def get_top_tags(tags: List[dict], max_tags: int = 5) -> List[str]:
 
 
 def generate_clean_caption(scene_data: dict, original_filename: str = None) -> str:
-    """Generate clean caption: Title + Female Performer(s) + 5 Tags"""
+    """Generate clean caption: Title + Studio + Female Performer(s) + 5 Tags"""
     
     # Get title
     title = scene_data.get('title', '')
@@ -205,6 +205,10 @@ def generate_clean_caption(scene_data: dict, original_filename: str = None) -> s
         _, title = parse_filename(original_filename)
     if not title:
         title = "Scene"
+    
+    # Get studio
+    studio = scene_data.get('studio', {})
+    studio_name = studio.get('name', '') if isinstance(studio, dict) else ''
     
     # Get female performer(s)
     performers = scene_data.get('performers', [])
@@ -217,9 +221,15 @@ def generate_clean_caption(scene_data: dict, original_filename: str = None) -> s
     # Build caption
     lines = []
     
-    # Title line
-    if performer_str:
+    # Title line with studio
+    if performer_str and studio_name:
         lines.append(f"🎬 <b>{performer_str} — {title}</b>")
+        lines.append(f"📺 {studio_name}")
+    elif performer_str:
+        lines.append(f"🎬 <b>{performer_str} — {title}</b>")
+    elif studio_name:
+        lines.append(f"🎬 <b>{title}</b>")
+        lines.append(f"📺 {studio_name}")
     else:
         lines.append(f"🎬 <b>{title}</b>")
     
