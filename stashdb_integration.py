@@ -72,7 +72,7 @@ def query_api(url: str, api_key: str, query: str, variables: dict = None) -> Opt
     
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}'
+        'ApiKey': api_key  # StashDB/FansDB use ApiKey header, not Bearer
     }
     
     payload = {'query': query, 'variables': variables or {}}
