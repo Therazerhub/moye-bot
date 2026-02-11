@@ -1,6 +1,6 @@
 """
 StashDB/FansDB Integration Module
-Handles caption formatting with metadata lookup
+Handles caption formatting with metadata lookup - CLEAN & SIMPLE
 """
 
 import os
@@ -18,17 +18,17 @@ STASHDB_GRAPHQL_URL = os.getenv('STASHDB_GRAPHQL_URL', 'https://stashdb.org/grap
 FANSDB_API_KEY = os.getenv('FANSDB_API_KEY')
 FANSDB_GRAPHQL_URL = os.getenv('FANSDB_GRAPHQL_URL', 'https://fansdb.cc/graphql')
 
-# GraphQL query for FansDB (uses queryScenes with SceneQueryInput)
+# GraphQL query for FansDB
 FANSDB_SEARCH_QUERY = """
 query SearchScenes($input: SceneQueryInput!) {
   queryScenes(input: $input) {
     scenes {
       id
       title
-      date
       performers {
         performer {
           name
+          gender
         }
       }
       studio {
@@ -42,22 +42,17 @@ query SearchScenes($input: SceneQueryInput!) {
 }
 """
 
-# GraphQL query for StashDB (uses searchScene)
+# GraphQL query for StashDB
 STASHDB_SEARCH_QUERY = """
 query SearchScenes($term: String!, $limit: Int = 5) {
-  searchScene(
-    term: $term
-    limit: $limit
-  ) {
+  searchScene(term: $term, limit: $limit) {
     id
     title
-    date
     performers {
       performer {
         name
         gender
       }
-      as
     }
     studio {
       name
@@ -80,28 +75,20 @@ def query_api(url: str, api_key: str, query: str, variables: dict = None) -> Opt
         'Authorization': f'Bearer {api_key}'
     }
     
-    payload = {
-        'query': query,
-        'variables': variables or {}
-    }
+    payload = {'query': query, 'variables': variables or {}}
     
     try:
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
         
         if 'errors' in data:
-            print(f"GraphQL errors from {url}: {data['errors']}")
+            print(f"GraphQL errors: {data['errors']}")
             return None
             
         return data
     except Exception as e:
-        print(f"API query error ({url}): {e}")
+        print(f"API error: {e}")
         return None
 
 
@@ -110,20 +97,15 @@ def search_fansdb(title: str, performer: str = None) -> Optional[dict]:
     if not FANSDB_API_KEY:
         return None
     
-    # Build input - use text search which searches title, performer, etc
     search_text = f"{performer} {title}" if performer else title
     
     result = query_api(FANSDB_GRAPHQL_URL, FANSDB_API_KEY, FANSDB_SEARCH_QUERY, 
                       {'input': {'text': search_text, 'per_page': 5}})
     
-    if not result or 'data' not in result:
-        return None
-    
-    scenes = result['data'].get('queryScenes', {}).get('scenes', [])
-    
-    if isinstance(scenes, list) and len(scenes) > 0:
-        return scenes[0]
-    
+    if result and 'data' in result:
+        scenes = result['data'].get('queryScenes', {}).get('scenes', [])
+        if scenes:
+            return scenes[0]
     return None
 
 
@@ -132,105 +114,123 @@ def search_stashdb(title: str, performer: str = None) -> Optional[dict]:
     if not STASHDB_API_KEY:
         return None
     
-    if performer:
-        search_term = f"{performer} {title}"
-    else:
-        search_term = title
+    search_term = f"{performer} {title}" if performer else title
     
-    result = query_api(STASHDB_GRAPHQL_URL, STASHDB_API_KEY, STASHDB_SEARCH_QUERY, {'term': search_term, 'limit': 5})
+    result = query_api(STASHDB_GRAPHQL_URL, STASHDB_API_KEY, STASHDB_SEARCH_QUERY, 
+                      {'term': search_term, 'limit': 5})
     
-    if not result or 'data' not in result:
-        return None
-    
-    scenes = result['data'].get('searchScene', [])
-    
-    if isinstance(scenes, list) and len(scenes) > 0:
-        return scenes[0]
-    
+    if result and 'data' in result:
+        scenes = result['data'].get('searchScene', [])
+        if scenes:
+            return scenes[0]
     return None
 
 
 def parse_filename(filename: str) -> tuple:
-    """Parse filename to extract performer and scene title"""
+    """Parse filename to extract performer and title"""
     name = os.path.splitext(filename)[0]
     name = name.replace('.', ' ').replace('_', ' ')
     
     if ' - ' in name:
         parts = name.split(' - ', 1)
-        performer = parts[0].strip()
-        title = parts[1].strip()
-        return performer, title
+        return parts[0].strip(), parts[1].strip()
     
     words = name.split()
     if len(words) >= 4:
-        performer = ' '.join(words[:2])
-        title = ' '.join(words[2:])
-        return performer, title
+        return ' '.join(words[:2]), ' '.join(words[2:])
     
     return None, name
 
 
-def format_performer_name(performers: List[dict]) -> str:
-    """Format performer names"""
+def get_female_performer_names(performers: List[dict]) -> str:
+    """Get only female performer names (max 2)"""
     if not performers:
-        return "Unknown"
+        return None
     
-    names = []
+    female_names = []
+    
     for p in performers:
-        performer = p.get('performer', {}) if isinstance(p, dict) else {}
-        name = performer.get('name', '') if isinstance(performer, dict) else str(performer)
-        if name:
-            names.append(name)
+        if not isinstance(p, dict):
+            continue
+            
+        performer = p.get('performer', {})
+        if not isinstance(performer, dict):
+            continue
+            
+        name = performer.get('name', '')
+        gender = performer.get('gender', '')
+        
+        # Only include if female (FEMALE or empty/unknown)
+        if name and (not gender or gender.upper() in ['FEMALE', 'F', '']):
+            female_names.append(name)
+            if len(female_names) >= 2:  # Max 2 performers
+                break
     
-    if len(names) == 1:
-        return names[0]
-    elif len(names) == 2:
-        return f"{names[0]} & {names[1]}"
-    elif len(names) > 2:
-        return f"{names[0]}, {names[1]} & {len(names)-2} more"
+    if len(female_names) == 1:
+        return female_names[0]
+    elif len(female_names) == 2:
+        return f"{female_names[0]} & {female_names[1]}"
     
-    return "Unknown"
+    return None
 
 
-def format_tags(tags: List[dict], max_tags: int = 10) -> List[str]:
-    """Format tags for hashtags"""
+def get_top_tags(tags: List[dict], max_tags: int = 5) -> List[str]:
+    """Get top tags, cleaned and limited"""
+    if not tags:
+        return []
+    
     formatted = []
     for tag in tags[:max_tags]:
         if isinstance(tag, dict):
             tag_name = tag.get('name', '')
         else:
             tag_name = str(tag)
+        
         if tag_name:
-            clean_tag = re.sub(r'[^\w]', '', tag_name.lower())
-            if clean_tag:
-                formatted.append(clean_tag)
-    return formatted
-
-
-def generate_caption(scene_data: dict, original_filename: str = None) -> str:
-    """Generate formatted caption"""
-    performers = scene_data.get('performers', [])
-    performer_name = format_performer_name(performers)
+            # Clean tag: lowercase, remove special chars
+            clean = re.sub(r'[^\w\s]', '', tag_name.lower())
+            clean = clean.replace(' ', '')
+            if clean and len(clean) > 2:  # Skip short tags
+                formatted.append(clean)
     
+    return formatted[:max_tags]
+
+
+def generate_clean_caption(scene_data: dict, original_filename: str = None) -> str:
+    """Generate clean caption: Title + Female Performer(s) + 5 Tags"""
+    
+    # Get title
     title = scene_data.get('title', '')
     if not title and original_filename:
         _, title = parse_filename(original_filename)
     if not title:
         title = "Scene"
     
-    caption = f"🔥🎬 <b>{performer_name} - {title}</b> ✨"
+    # Get female performer(s)
+    performers = scene_data.get('performers', [])
+    performer_str = get_female_performer_names(performers)
     
-    studio = scene_data.get('studio', {})
-    if isinstance(studio, dict) and studio.get('name'):
-        caption += f"\n📺 {studio['name']}"
-    
+    # Get top 5 tags
     tags = scene_data.get('tags', [])
-    if tags:
-        tag_list = format_tags(tags, max_tags=10)
-        if tag_list:
-            hashtag_line = ' '.join([f'#{tag}' for tag in tag_list])
-            caption += f"\n\n{hashtag_line}"
+    tag_list = get_top_tags(tags, max_tags=5)
     
+    # Build caption
+    lines = []
+    
+    # Title line
+    if performer_str:
+        lines.append(f"🎬 <b>{performer_str} — {title}</b>")
+    else:
+        lines.append(f"🎬 <b>{title}</b>")
+    
+    # Tags line (max 5)
+    if tag_list:
+        tags_str = ' '.join([f'#{tag}' for tag in tag_list])
+        lines.append(f"\n{tags_str}")
+    
+    caption = '\n'.join(lines)
+    
+    # Truncate if too long
     if len(caption) > 1024:
         caption = caption[:1020] + "..."
     
@@ -239,18 +239,18 @@ def generate_caption(scene_data: dict, original_filename: str = None) -> str:
 
 def process_video_caption(filename: str) -> Optional[str]:
     """
-    Main function: Search both databases and return formatted caption
-    Priority: FansDB first (unrestricted), then StashDB, then filename fallback
+    Main function: Search databases and return clean caption
+    Format: Title + Female Performer(s) + 5 Tags
     """
-    # Parse filename first (always available)
+    # Parse filename
     performer, title = parse_filename(filename)
     
-    # Try FansDB first (unrestricted)
+    # Try FansDB first
     try:
         scene = search_fansdb(title, performer)
         if scene:
-            print(f"✅ Found in FansDB: {filename[:50]}")
-            return generate_caption(scene, filename)
+            print(f"✅ FansDB: {filename[:50]}")
+            return generate_clean_caption(scene, filename)
     except Exception as e:
         print(f"FansDB error: {e}")
     
@@ -258,34 +258,29 @@ def process_video_caption(filename: str) -> Optional[str]:
     try:
         scene = search_stashdb(title, performer)
         if scene:
-            print(f"✅ Found in StashDB: {filename[:50]}")
-            return generate_caption(scene, filename)
+            print(f"✅ StashDB: {filename[:50]}")
+            return generate_clean_caption(scene, filename)
     except Exception as e:
         print(f"StashDB error: {e}")
     
-    # Final fallback: format filename nicely
+    # Fallback: just format filename
     if performer:
-        fallback = f"🔥🎬 <b>{performer} - {title}</b> ✨"
-    else:
-        fallback = f"🔥🎬 <b>{title}</b> ✨"
-    
-    return fallback
+        return f"🎬 <b>{performer} — {title}</b>"
+    return f"🎬 <b>{title}</b>"
 
 
-# Test function
+# Test
 if __name__ == '__main__':
     test_files = [
         "Jia Lissa - Midnight Ride.mp4",
         "Ariana Marie - Call Me.mp4",
-        "Vixen.23.01.15.Alice.Visby.XXX.1080p.mp4"
     ]
     
     for filename in test_files:
-        print(f"\n{'='*60}")
-        print(f"Processing: {filename}")
-        print('='*60)
+        print(f"\n{'='*50}")
+        print(f"File: {filename}")
         caption = process_video_caption(filename)
         if caption:
-            print(f"✅ Caption:\n{caption}")
+            print(f"Caption:\n{caption}")
         else:
-            print("❌ No match found in either database")
+            print("No match found")
