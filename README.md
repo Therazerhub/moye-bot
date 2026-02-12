@@ -157,6 +157,18 @@ Videos with `.part001`, `.part002`, etc. in filename are automatically detected:
 - FansDB is more reliable (unrestricted)
 - Bot falls back to filename parsing if APIs fail
 
+## Documentation
+
+Detailed docs moved to [`docs/`](docs/) to avoid psychopath vibes:
+
+- [`docs/AUTO_RENAME.md`](docs/AUTO_RENAME.md) - Auto-rename configuration
+- [`docs/BULK_IMPORT.md`](docs/BULK_IMPORT.md) - Bulk import guide
+- [`docs/DUPLICATE_DETECTION.md`](docs/DUPLICATE_DETECTION.md) - Duplicate detection
+- [`docs/FEEDBACK_LOOP.md`](docs/FEEDBACK_LOOP.md) - Feedback system
+- [`docs/INTEGRATION.md`](docs/INTEGRATION.md) - StashDB/FansDB integration
+- [`docs/ORGANIZE.md`](docs/ORGANIZE.md) - Channel organizer
+- [`docs/PERFORMER_DB.md`](docs/PERFORMER_DB.md) - Performer database
+
 ## File Structure
 
 ```
@@ -169,7 +181,15 @@ stash_bot/
 ├── .env                     # Your credentials (not in git)
 ├── stash.db                 # SQLite database
 ├── README.md                # This file
-└── bot.log                  # Log file
+├── bot.log                  # Log file
+└── docs/                    # Documentation (not psychopath)
+    ├── AUTO_RENAME.md
+    ├── BULK_IMPORT.md
+    ├── DUPLICATE_DETECTION.md
+    ├── FEEDBACK_LOOP.md
+    ├── INTEGRATION.md
+    ├── ORGANIZE.md
+    └── PERFORMER_DB.md
 ```
 
 ## Credits
